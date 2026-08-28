@@ -7,6 +7,7 @@ Created on Wed Aug 19 21:10:53 2026
 
 import numpy as np
 import matplotlib.pyplot as plt
+from scipy.stats import kstest
 
 #%% definiciones
 #le atribuyo una amplitud tal que la potencia de la funcion seno sea 0
@@ -40,19 +41,73 @@ plt.plot(tt, f_con_ruido)
 #%%20/8; FFT
 #x(k = 0) = DC * N
 
-#tt, xx = function_sen(ff = 250)
-tt, f_sen_ruido = function_sen_nq(ff = 4, SNRdB= 10000, ph= 1)
+#tt, xx = function_sen(ff = 1)
+tt, f_sen_ruido = function_sen_nq(ff = 4, SNRdB= 40, ph= 0)
 # Calcular la FFT
 
-Y = np.fft.fft(f_sen_ruido) #la parte imaginaria(incluye fase) representa las deltas
+f_sen_ruido = f_sen_ruido[:N//2]
+
+
+#Y = np.fft.fft(xx)
+Y = (1/N) * np.fft.fft(2 * f_sen_ruido) #la parte imaginaria(incluye fase) representa las deltas
+#multiplico * 1/N para normalizar y *2 para que la potencia sea 1 de la mitad de f_sen_conruido
 # Calcular las frecuencias asociadas
 #freqs = np.fft.fftfreq(N, 1/fs) + N/2
+#Y_acot = Y[:N//2]
+tt_acot = tt[:N//2]
+#xx_acot = xx[:N//2]
+
+
 DC = Y[0]/N
-im_Y = np.imag(Y)
+fase_Y = np.angle(Y)
+mod_Y = np.abs(Y)
+Y_dB = 20 * np.log10(mod_Y)
 
-# Magnitud normalizada
-magnitude = np.abs(Y) / N
+plt.figure(1)
+#plt.plot(xx_acot)
+#plt.plot(f_sen_ruido)
+plt.subplot(2,1,1)
+plt.plot(Y_dB)
+plt.subplot(2,1,2)
+plt.plot(fase_Y)
 
-plt.plot(im_Y)
+#%%cuantización
+B = 8 #2^B bits
+Vfs = 1.65 #uso 1.65 pq ax= np.sqrt(2) q es aprox 1.5, le sumo un poco x el error
+q = 2 * Vfs /pow(2, B) #niveles de cuantización
+f_sen_ruido_D = np.round(f_sen_ruido/q) * q
+nq = (f_sen_ruido_D - f_sen_ruido) #/ q #normalizo en q para que el valor este enre +-0.5 no lo normalizo asi queda en volts ;)
+
+plt.figure(2)
+plt.plot(f_sen_ruido_D, ':x')
+plt.plot(f_sen_ruido, ':v')
+
+#%% analisis del ruido
+#demuestro que ruido es incorrelado; la energía debe ser una delta en n = 0
+
+Pnq = np.correlate(nq, nq, mode='full') / (N/2)
+plt.figure(3)
+plt.plot(Pnq)
+i = (N/2)-1
+
+print("varianza: ", np.var(nq), "valor de la energía en el delta: ", Pnq[i])
+
+#copio de chat:
+#%% Test de Kolmogorov-Smirnov
+
+resultado = kstest(nq, 'uniform', args=(-q/2, 0))
+
+print("Estadístico KS =", resultado.statistic)
+print("p-value =", resultado.pvalue)
 
 
+#%% Decisión estadística
+
+alpha = 0.05
+
+if resultado.pvalue > alpha:
+    print("No se rechaza H0.")
+    print("El ruido es compatible con una distribución uniforme.")
+else:
+    print("Se rechaza H0.")
+    print("El ruido NO es compatible con una distribución uniforme.")
